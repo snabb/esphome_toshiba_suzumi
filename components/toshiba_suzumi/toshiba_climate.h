@@ -109,6 +109,7 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   void getInitData();
   void handle_rx_byte_(uint8_t c);
   bool validate_message_();
+  void acknowledge_state_update_(uint8_t sequence);
   void on_set_pwr_level(const std::string &value);
   void on_set_vertical_air_direction(const std::string &value);
   void publish_vertical_air_direction_(SWING swing_mode);
