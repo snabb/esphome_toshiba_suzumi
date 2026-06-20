@@ -1,10 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <string>
+
 #include "esphome/core/component.h"
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/uart/uart.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/select/select.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "toshiba_climate_mode.h"
 
 namespace esphome {
@@ -35,6 +39,7 @@ struct ToshibaCommand {
   ToshibaCommandType cmd;
   std::vector<uint8_t> payload;
   int delay;
+  bool expects_model_info = false;
 };
 
 class ToshibaClimateUart : public PollingComponent, public climate::Climate, public uart::UARTDevice {
@@ -45,6 +50,7 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   void update() override;
   void scan();
   void set_wifi_led(bool enabled);
+  bool supports_energy_reporting() const { return energy_reporting_support_known_ && energy_reporting_supported_; }
   float get_setup_priority() const override { return setup_priority::LATE; }
 
   void set_indoor_temp_sensor(sensor::Sensor *indoor_temp_sensor) { indoor_temp_sensor_ = indoor_temp_sensor; }
@@ -57,6 +63,12 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   void set_fcu_tc_temp_sensor(sensor::Sensor *sensor) { fcu_tc_temp_sensor_ = sensor; }
   void set_fcu_tcj_temp_sensor(sensor::Sensor *sensor) { fcu_tcj_temp_sensor_ = sensor; }
   void set_fcu_fan_rpm_sensor(sensor::Sensor *sensor) { fcu_fan_rpm_sensor_ = sensor; }
+  void set_model_sensor(text_sensor::TextSensor *sensor) {
+    model_sensor_ = sensor;
+    if (!model_name_.empty()) {
+      model_sensor_->publish_state(model_name_);
+    }
+  }
   void set_pwr_select(select::Select *pws_select) { pwr_select_ = pws_select; }
   void set_vertical_air_direction_select(select::Select *vertical_air_direction_select) {
     vertical_air_direction_select_ = vertical_air_direction_select;
@@ -93,10 +105,15 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   sensor::Sensor *fcu_tc_temp_sensor_ = nullptr;
   sensor::Sensor *fcu_tcj_temp_sensor_ = nullptr;
   sensor::Sensor *fcu_fan_rpm_sensor_ = nullptr;
+  text_sensor::TextSensor *model_sensor_ = nullptr;
   bool horizontal_swing_ = false;
   uint8_t min_temp_ = 17; // default min temp for units without 8° heating mode
   bool heat_mode_disabled_ = false;
   bool wifi_led_disabled_ = false;
+  bool model_info_response_pending_ = false;
+  bool energy_reporting_supported_ = false;
+  bool energy_reporting_support_known_ = false;
+  std::string model_name_;
   std::vector<const char*> supported_presets_;
 
   void enqueue_command_(const ToshibaCommand &command);
@@ -109,6 +126,7 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   void getInitData();
   void handle_rx_byte_(uint8_t c);
   bool validate_message_();
+  void parse_model_info_response_();
   void on_set_pwr_level(const std::string &value);
   void on_set_vertical_air_direction(const std::string &value);
   void publish_vertical_air_direction_(SWING swing_mode);

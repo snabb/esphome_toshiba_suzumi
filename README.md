@@ -145,6 +145,8 @@ climate:
       #- "Floor"
       #- "Comfort"
     #disable_wifi_led: true # Optional. Disable Wifi LED on internal unit.
+    #model:                       # Optional. AC model reported during the protocol handshake
+    #  name: AC Model
     #cdu_load:                    # Optional. Compressor load (%) - useful for estimating power consumption
     #  name: "Compressor Load"
     #cdu_iac:                     # Optional. Compressor current

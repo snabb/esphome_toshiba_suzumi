@@ -1,8 +1,9 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor, climate, uart, select
+from esphome.components import sensor, climate, uart, select, text_sensor
 from esphome.const import (
     CONF_ID,
+    ENTITY_CATEGORY_DIAGNOSTIC,
     STATE_CLASS_MEASUREMENT,
     UNIT_CELSIUS,
     UNIT_PERCENT,
@@ -17,7 +18,7 @@ import logging
 _LOGGER = logging.getLogger(__name__)
 
 DEPENDENCIES = ["uart"]
-AUTO_LOAD = ["sensor", "select"]
+AUTO_LOAD = ["sensor", "select", "text_sensor"]
 
 CONF_ROOM_TEMP = "room_temp"
 CONF_INDOOR_TEMP = "indoor_temp"
@@ -30,6 +31,7 @@ CONF_CDU_IAC = "cdu_iac"
 CONF_FCU_TC_TEMP = "fcu_tc_temp"
 CONF_FCU_TCJ_TEMP = "fcu_tcj_temp"
 CONF_FCU_FAN_RPM = "fcu_fan_rpm"
+CONF_MODEL = "model"
 CONF_PWR_SELECT = "power_select"
 CONF_VERTICAL_AIR_DIRECTION = "vertical_air_direction"
 CONF_SPECIAL_MODE = "special_mode" # deprecated - replaced by CONF_SUPPORTED_PRESETS
@@ -108,6 +110,10 @@ CONFIG_SCHEMA = climate.climate_schema(ToshibaClimateUart).extend(
                 accuracy_decimals=0,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
+        cv.Optional(CONF_MODEL): text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:air-conditioner",
+            ),
         cv.Optional(CONF_PWR_SELECT): select.select_schema(ToshibaPwrModeSelect).extend({
             cv.GenerateID(): cv.declare_id(ToshibaPwrModeSelect),
         }),
@@ -175,6 +181,10 @@ async def to_code(config):
     if CONF_FCU_FAN_RPM in config:
         sens = await sensor.new_sensor(config[CONF_FCU_FAN_RPM])
         cg.add(var.set_fcu_fan_rpm_sensor(sens))
+
+    if CONF_MODEL in config:
+        sens = await text_sensor.new_text_sensor(config[CONF_MODEL])
+        cg.add(var.set_model_sensor(sens))
 
     if CONF_PWR_SELECT in config:
         sel = await select.new_select(config[CONF_PWR_SELECT], options=['50 %', '75 %', '100 %'])
