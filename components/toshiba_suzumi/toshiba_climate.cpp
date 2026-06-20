@@ -216,8 +216,32 @@ void ToshibaClimateUart::parseResponse(std::vector<uint8_t> rawData) {
   uint8_t value;
 
   // The AC expects an acknowledgement for every unsolicited state update.
-  if (length >= 15 && rawData[0] == 0x02 && rawData[1] == 0x00 && rawData[2] == 0x03 && rawData[3] == 0x11) {
+  bool is_unsolicited_update = length >= 15 && rawData[0] == 0x02 && rawData[1] == 0x00 &&
+                               rawData[2] == 0x03 && rawData[3] == 0x11;
+  if (is_unsolicited_update) {
     this->acknowledge_state_update_(rawData[4]);
+  }
+
+  if (is_unsolicited_update && rawData[12] == 0xE0) {
+    std::string model_name;
+    for (size_t i = 13; i + 1 < rawData.size(); i++) {
+      uint8_t character = rawData[i];
+      if (character == 0) {
+        if (model_name.empty()) {
+          ESP_LOGW(TAG, "Received model information update without a model name");
+        } else {
+          ESP_LOGI(TAG, "Received AC model information: %s", model_name.c_str());
+        }
+        return;
+      }
+      if (character < 0x20 || character > 0x7E) {
+        ESP_LOGW(TAG, "Received malformed model information update");
+        return;
+      }
+      model_name.push_back(static_cast<char>(character));
+    }
+    ESP_LOGW(TAG, "Received unterminated model information update");
+    return;
   }
 
   switch (length) {
