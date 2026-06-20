@@ -139,6 +139,15 @@ void ToshibaClimateUart::requestData(ToshibaCommandType cmd) {
   this->enqueue_command_(ToshibaCommand{.cmd = cmd, .payload = std::vector<uint8_t>{payload}});
 }
 
+void ToshibaClimateUart::acknowledge_state_update_(uint8_t sequence) {
+  std::vector<uint8_t> payload = {2, 0, 3, 0x91, sequence, 0, 5, 0, 0, 1, 48, 1};
+  payload.push_back(checksum(payload, payload.size()));
+
+  // Unsolicited updates must be acknowledged immediately, not queued behind commands.
+  ESP_LOGV(TAG, "Acknowledging unsolicited update: [%s]", format_hex_pretty(payload).c_str());
+  this->write_array(payload);
+}
+
 void ToshibaClimateUart::getInitData() {
   ESP_LOGD(TAG, "Requesting initial data from AC unit");
   this->requestData(ToshibaCommandType::POWER_STATE);
@@ -258,6 +267,11 @@ void ToshibaClimateUart::parseResponse(std::vector<uint8_t> rawData) {
   uint8_t length = rawData.size();
   ToshibaCommandType sensor;
   uint8_t value;
+
+  // The AC expects an acknowledgement for every unsolicited state update.
+  if (length >= 15 && rawData[0] == 0x02 && rawData[1] == 0x00 && rawData[2] == 0x03 && rawData[3] == 0x11) {
+    this->acknowledge_state_update_(rawData[4]);
+  }
 
   switch (length) {
     case 15:  // response to requestData with the actual value of sensor/setting
