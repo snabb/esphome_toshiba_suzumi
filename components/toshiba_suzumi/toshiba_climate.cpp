@@ -12,6 +12,8 @@ using namespace esphome::climate;
 
 static const int RECEIVE_TIMEOUT = 200;
 static const int COMMAND_DELAY = 100;
+static const size_t MODEL_INFO_NAME_OFFSET = 181;
+static const size_t MODEL_INFO_NAME_LENGTH = 20;
 
 /**
  * Checksum is calculated from all bytes excluding start byte.
@@ -40,6 +42,7 @@ ToshibaClimateUart::ToshibaClimateUart() {
  */
 void ToshibaClimateUart::send_to_uart(ToshibaCommand command) {
   this->last_command_timestamp_ = millis();
+  this->model_info_response_pending_ = command.expects_model_info;
   ESP_LOGV(TAG, "Sending: [%s]", format_hex_pretty(command.payload).c_str());
   this->write_array(command.payload);
 }
@@ -54,7 +57,10 @@ void ToshibaClimateUart::start_handshake() {
   enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE, .payload = HANDSHAKE[2]});
   enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE, .payload = HANDSHAKE[3]});
   enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE, .payload = HANDSHAKE[4]});
-  enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE, .payload = HANDSHAKE[5]});
+  // The reply to this handshake packet contains the model name.
+  enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE,
+                                  .payload = HANDSHAKE[5],
+                                  .expects_model_info = true});
   enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::DELAY, .delay = 2000});
   enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE, .payload = AFTER_HANDSHAKE[0]});
   enqueue_command_(ToshibaCommand{.cmd = ToshibaCommandType::HANDSHAKE, .payload = AFTER_HANDSHAKE[1]});
@@ -222,6 +228,9 @@ void ToshibaClimateUart::process_command_queue_() {
   // format is was not recognized by validate_message_ function.
   // Nothing to do - drop the message to free up communication and allow to send next command.
   if (now - this->last_rx_char_timestamp_ > RECEIVE_TIMEOUT) {
+    if (this->model_info_response_pending_ && !this->rx_message_.empty()) {
+      this->parse_model_info_response_();
+    }
     this->rx_message_.clear();
   }
 
@@ -240,6 +249,32 @@ void ToshibaClimateUart::process_command_queue_() {
     this->send_to_uart(this->command_queue_.front());
     this->command_queue_.erase(this->command_queue_.begin());
   }
+}
+
+void ToshibaClimateUart::parse_model_info_response_() {
+  this->model_info_response_pending_ = false;
+  if (this->rx_message_.size() <= MODEL_INFO_NAME_OFFSET) {
+    ESP_LOGW(TAG, "Model-info response is too short: %u bytes",
+             static_cast<unsigned>(this->rx_message_.size()));
+    return;
+  }
+
+  std::string model_name;
+  for (size_t i = MODEL_INFO_NAME_OFFSET;
+       i < this->rx_message_.size() && i < MODEL_INFO_NAME_OFFSET + MODEL_INFO_NAME_LENGTH; i++) {
+    const uint8_t character = this->rx_message_[i];
+    if (character == 0x00 || character == ' ') {
+      break;
+    }
+    model_name.push_back(static_cast<char>(character));
+  }
+
+  if (model_name.empty()) {
+    ESP_LOGW(TAG, "AC model name is empty");
+    return;
+  }
+
+  ESP_LOGI(TAG, "Detected AC model: %s", model_name.c_str());
 }
 
 /**

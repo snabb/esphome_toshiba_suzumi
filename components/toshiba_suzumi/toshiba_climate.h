@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "esphome/core/component.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/climate/climate.h"
@@ -39,6 +41,7 @@ struct ToshibaCommand {
   ToshibaCommandType cmd;
   std::vector<uint8_t> payload;
   int delay;
+  bool expects_model_info = false;
 };
 
 class ToshibaClimateUart : public PollingComponent, public climate::Climate, public uart::UARTDevice {
@@ -114,6 +117,7 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   uint8_t min_temp_ = 17; // default min temp for units without 8° heating mode
   bool heat_mode_disabled_ = false;
   bool wifi_led_disabled_ = false;
+  bool model_info_response_pending_ = false;
   std::vector<const char*> supported_presets_;
   uint32_t last_time_sync_ = 0;
   uint32_t last_energy_sync_ = 0;
@@ -133,6 +137,7 @@ class ToshibaClimateUart : public PollingComponent, public climate::Climate, pub
   void getInitData();
   void handle_rx_byte_(uint8_t c);
   bool validate_message_();
+  void parse_model_info_response_();
   void set_self_clean_running_(bool running);
   void acknowledge_state_update_(uint8_t sequence);
   void on_set_pwr_level(const std::string &value);
